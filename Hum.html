@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Aventura do Luan — Mobile</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;background:#101827;color:#f7f9ff;font-family:system-ui,-apple-system,Arial,sans-serif;padding:12px;touch-action:manipulation}
+main{max-width:900px;margin:auto}h1{font-size:1.45rem;margin:4px 0}p{color:#cbd5e1;margin:6px 0 12px}
+canvas{display:block;width:100%;height:auto;aspect-ratio:9/5;border:2px solid #eaf2ff;border-radius:12px;background:#8ed6ff;touch-action:none}
+.stats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}.pill{background:#243249;border-radius:999px;padding:7px 11px;font-size:.93rem}
+.controls{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 8px;user-select:none}
+.group{display:flex;gap:10px}.ctrl{width:min(20vw,82px);height:min(18vw,72px);min-height:58px;border:0;border-radius:16px;background:#e7eefb;color:#152238;font-size:1.65rem;font-weight:900;box-shadow:0 4px 0 #9baac1;touch-action:none}
+.ctrl.jump{width:min(27vw,112px);background:#ffcc4d}.ctrl:active{transform:translateY(3px);box-shadow:0 1px 0 #9baac1}
+button.restart{border:0;border-radius:10px;padding:10px 14px;background:#ffcc4d;color:#182235;font-weight:800;font-size:1rem}
+.hint{font-size:.88rem;line-height:1.4}
+</style>
+</head>
+<body><main>
+<h1>🗺️ Aventura do Luan — Mobile</h1>
+<p>Use os botões para explorar 3 fases, pegar moedas e derrotar os slimes pulando em cima deles!</p>
+<canvas id="game" width="900" height="500"></canvas>
+<div class="stats">
+<div class="pill">🌎 Fase <b id="lv">1</b>/3</div><div class="pill">🪙 Moedas <b id="coin">0</b>/<b id="total">0</b></div><div class="pill">❤️ Vidas <b id="life">3</b></div><div class="pill" id="msg">Boa aventura!</div>
+</div>
+<div class="controls">
+<div class="group">
+<button class="ctrl" id="left" aria-label="Andar para esquerda">◀</button>
+<button class="ctrl" id="right" aria-label="Andar para direita">▶</button>
+</div>
+<button class="ctrl jump" id="jump" aria-label="Pular">⬆ PULAR</button>
+</div>
+<button class="restart" id="reset">Recomeçar</button>
+<p class="hint">Dica: mantenha ◀ ou ▶ pressionado para andar. Segure ⬆ PULAR para saltar quando estiver no chão. Encostar em espinhos ou inimigos tira uma vida; cair em cima dos inimigos os derrota.</p>
+</main>
+<script>
+(()=> {
+const cv=document.getElementById('game'),c=cv.getContext('2d');
+const ui={lv:document.getElementById('lv'),coin:document.getElementById('coin'),total:document.getElementById('total'),life:document.getElementById('life'),msg:document.getElementById('msg')};
+const W=900,H=500,grav=.62,keys={left:false,right:false,jump:false};
+const maps=[
+{name:'Pradaria',width:1900,sky:'#83d5ff',hill:'#a5e6b0',ground:'#9a6137',top:'#38b764',start:[45,350],
+p:[[0,430,310,70],[365,390,155,24],[555,350,150,24],[740,315,155,24],[930,390,190,24],[1160,350,160,24],[1360,310,170,24],[1570,390,330,110]],
+h:[[315,430,48,24],[520,390,35,24],[895,430,35,24],[1125,430,35,24],[1535,430,35,24]],
+co:[[180,345],[410,345],[600,305],[790,270],[1000,345],[1235,310],[1435,270],[1730,345]],
+en:[[440,352,365,500,1.25],[1010,352,945,1100,1.5],[1430,272,1370,1510,1.1]],flag:1830},
+{name:'Cavernas',width:2050,sky:'#6c79c9',hill:'#a9a7e5',ground:'#62534f',top:'#aaa5d6',start:[45,350],
+p:[[0,430,260,70],[320,380,145,24],[510,325,150,24],[710,370,145,24],[900,310,160,24],[1110,365,150,24],[1300,300,150,24],[1510,355,170,24],[1740,400,310,100]],
+h:[[265,430,48,24],[465,430,35,24],[665,430,35,24],[860,430,35,24],[1065,430,35,24],[1260,430,35,24],[1460,430,35,24],[1685,430,35,24]],
+co:[[150,345],[370,335],[560,280],[755,325],[950,265],[1160,320],[1350,255],[1560,310],[1850,355]],
+en:[[375,342,325,445,1.5],[770,332,715,820,1.4],[950,272,905,1030,1.2],[1560,317,1515,1640,1.6]],flag:1940},
+{name:'Ilha do Céu',width:2200,sky:'#ffc0dc',hill:'#ffdda6',ground:'#a56b87',top:'#ffb85e',start:[45,350],
+p:[[0,430,240,70],[290,385,125,24],[465,335,130,24],[650,285,130,24],[835,340,130,24],[1020,285,130,24],[1205,330,140,24],[1400,280,140,24],[1600,340,140,24],[1800,390,400,110]],
+h:[[245,430,40,24],[420,430,35,24],[600,430,35,24],[785,430,35,24],[970,430,35,24],[1150,430,35,24],[1345,430,35,24],[1545,430,35,24],[1745,430,35,24]],
+co:[[120,345],[335,340],[510,290],[695,240],[880,295],[1065,240],[1250,285],[1445,235],[1645,295],[1900,345],[2050,345]],
+en:[[350,347,295,395,1.6],[520,297,470,560,1.25],[885,302,840,930,1.4],[1270,292,1210,1320,1.5],[1660,302,1605,1695,1.7]],flag:2110}
+];
+let li,map,player,plats,spikes,coins,enemies,flag,cam,lives,got,won,dead,inv=0;
+function load(i){li=i;map=maps[i];plats=map.p.map(a=>({x:a[0],y:a[1],w:a[2],h:a[3]}));spikes=map.h.map(a=>({x:a[0],y:a[1],w:a[2],h:a[3]}));coins=map.co.map(a=>({x:a[0],y:a[1],got:false}));enemies=map.en.map(a=>({x:a[0],y:a[1],w:28,h:28,min:a[2],max:a[3],vx:a[4],alive:true}));flag={x:map.flag,y:326};player={x:map.start[0],y:map.start[1],w:28,h:38,vx:0,vy:0,on:false};cam=0;inv=0;refresh();}
+function reset(){lives=3;got=0;won=false;dead=false;load(0);refresh();}
+function refresh(){ui.lv.textContent=li+1;ui.coin.textContent=got;ui.total.textContent=maps.reduce((s,m)=>s+m.co.length,0);ui.life.textContent=lives;ui.msg.textContent=won?'Você venceu! 🏆':dead?'Fim de jogo':'Fase: '+map.name;}
+function hit(a,b){return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;}
+function hurt(){if(inv>0||won||dead)return;lives--;if(lives<=0)dead=true;else{player.x=map.start[0];player.y=map.start[1];player.vx=player.vy=0;inv=90;}refresh();}
+function update(){if(won||dead)return;
+player.vx=keys.left?-4.2:keys.right?4.2:0;if(keys.jump&&player.on){player.vy=-12.5;player.on=false;}player.vy=Math.min(14,player.vy+grav);
+player.x=Math.max(0,Math.min(map.width-player.w,player.x+player.vx));for(const p of plats)if(hit(player,p)){if(player.vx>0)player.x=p.x-player.w;else if(player.vx<0)player.x=p.x+p.w;}
+const oldY=player.y;player.y+=player.vy;player.on=false;for(const p of plats)if(hit(player,p)){if(player.vy>0&&oldY+player.h<=p.y+9){player.y=p.y-player.h;player.vy=0;player.on=true;}else if(player.vy<0&&oldY>=p.y+p.h-5){player.y=p.y+p.h;player.vy=0;}}
+if(player.y>H+80)hurt();for(const s of spikes)if(hit(player,s))hurt();
+for(const e of enemies)if(e.alive){e.x+=e.vx;if(e.x<e.min||e.x+e.w>e.max)e.vx*=-1;if(hit(player,e)){if(player.vy>0&&oldY+player.h<=e.y+10){e.alive=false;player.vy=-8.5;}else hurt();}}
+if(inv>0)inv--;for(const co of coins)if(!co.got&&Math.hypot(player.x+14-co.x,player.y+19-co.y)<25){co.got=true;got++;refresh();}
+if(hit(player,{x:flag.x-8,y:flag.y,w:52,h:64})){if(li<maps.length-1)load(li+1);else{won=true;refresh();}}
+cam=Math.max(0,Math.min(map.width-W,player.x-W*.35));
+}
+function draw(){const g=c.createLinearGradient(0,0,0,H);g.addColorStop(0,map.sky);g.addColorStop(1,'#f5f7ff');c.fillStyle=g;c.fillRect(0,0,W,H);
+for(let i=0;i<8;i++){let x=i*280-(cam*.22%280);c.fillStyle=map.hill;c.beginPath();c.ellipse(x+80,430,155,90,0,Math.PI,Math.PI*2);c.fill();}
+c.save();c.translate(-cam,0);
+for(const p of plats){c.fillStyle=map.ground;c.fillRect(p.x,p.y,p.w,p.h);c.fillStyle=map.top;c.fillRect(p.x,p.y,p.w,8);c.fillStyle='rgba(30,30,45,.2)';for(let x=p.x+12;x<p.x+p.w;x+=28)c.fillRect(x,p.y+20,12,5);}
+for(const s of spikes){c.fillStyle='#e34b55';let n=Math.max(2,Math.floor(s.w/12));for(let i=0;i<n;i++){let x=s.x+i*s.w/n,w=s.w/n;c.beginPath();c.moveTo(x,s.y+s.h);c.lineTo(x+w/2,s.y);c.lineTo(x+w,s.y+s.h);c.fill();}}
+for(const co of coins)if(!co.got){c.fillStyle='#ffcb3d';c.beginPath();c.arc(co.x,co.y,10,0,Math.PI*2);c.fill();c.strokeStyle='#fff1a3';c.lineWidth=3;c.stroke();c.fillStyle='#a76c00';c.font='bold 12px sans-serif';c.textAlign='center';c.fillText('$',co.x,co.y+4);}
+for(const e of enemies)if(e.alive){c.fillStyle='#8d4be8';c.beginPath();c.roundRect(e.x,e.y,e.w,e.h,9);c.fill();c.fillStyle='white';c.fillRect(e.x+6,e.y+8,6,7);c.fillRect(e.x+17,e.y+8,6,7);c.fillStyle='#222';c.fillRect(e.x+8,e.y+10,3,4);c.fillRect(e.x+19,e.y+10,3,4);}
+c.fillStyle='white';c.fillRect(flag.x,flag.y,5,64);c.fillStyle='#ff5c6c';c.beginPath();c.moveTo(flag.x+5,flag.y);c.lineTo(flag.x+48,flag.y+14);c.lineTo(flag.x+5,flag.y+28);c.fill();
+if(inv===0||Math.floor(inv/6)%2===0){c.fillStyle='#273a8a';c.fillRect(player.x,player.y,player.w,player.h);c.fillStyle='#ffd2a6';c.fillRect(player.x+4,player.y+3,20,15);c.fillStyle='#222';c.fillRect(player.x+17,player.y+8,4,4);c.fillStyle='#ffcc4d';c.fillRect(player.x+2,player.y+33,9,5);c.fillRect(player.x+17,player.y+33,9,5);c.fillStyle='#19275c';c.fillRect(player.x+2,player.y-3,24,7);}
+c.restore();if(won||dead){c.fillStyle='rgba(12,20,35,.78)';c.fillRect(0,0,W,H);c.fillStyle='white';c.textAlign='center';c.font='bold 38px system-ui';c.fillText(won?'VOCÊ VENCEU!':'FIM DE JOGO',W/2,220);c.font='20px system-ui';c.fillText(won?`Moedas coletadas: ${got}`:'Toque em Recomeçar para tentar de novo',W/2,265);}}
+function loop(){update();draw();requestAnimationFrame(loop);}
+function bind(id,key){const b=document.getElementById(id);const on=e=>{e.preventDefault();keys[key]=true;};const off=e=>{e.preventDefault();keys[key]=false;};b.addEventListener('pointerdown',on);['pointerup','pointercancel','pointerleave','lostpointercapture'].forEach(ev=>b.addEventListener(ev,off));}
+bind('left','left');bind('right','right');bind('jump','jump');document.getElementById('reset').addEventListener('click',reset);
+window.addEventListener('keydown',e=>{if(['ArrowLeft','ArrowRight','ArrowUp',' '].includes(e.key))e.preventDefault();if(e.key==='ArrowLeft'||e.key==='a')keys.left=true;if(e.key==='ArrowRight'||e.key==='d')keys.right=true;if(e.key==='ArrowUp'||e.key==='w'||e.key===' ')keys.jump=true;if(e.key.toLowerCase()==='r')reset();});
+window.addEventListener('keyup',e=>{if(e.key==='ArrowLeft'||e.key==='a')keys.left=false;if(e.key==='ArrowRight'||e.key==='d')keys.right=false;if(e.key==='ArrowUp'||e.key==='w'||e.key===' ')keys.jump=false;});
+reset();loop();
+})();
+</script>
+</body></html>
